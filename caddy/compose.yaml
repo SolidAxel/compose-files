@@ -27,7 +27,7 @@ services:
         caddy.email: axelegar@gmail.com
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /home/axel/Docker/arr/caddy:/data
+      - /home/axel/Docker/caddy/caddy_data:/data
     restart: unless-stopped
 
 networks:
