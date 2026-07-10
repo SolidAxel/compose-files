@@ -1,0 +1,285 @@
+services:
+  gluetun:
+    image: qmcgaw/gluetun
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - 8888:8888/tcp # HTTP proxy
+      - 8388:8388/tcp # Shadowsocks
+      - 8388:8388/udp # Shadowsocks
+      - 8080:8080 # qBit
+      - 6881:6881
+      - 6881:6881/udp
+    restart: unless-stopped
+    labels:
+      caddy: qbit.lab.axelegarcia.com
+      caddy.reverse_proxy: "{{upstreams 8080}}"
+      caddy.tls.dns: cloudflare ${CF_API_TOKEN}
+    networks:
+      - caddy
+    environment:
+      - VPN_SERVICE_PROVIDER=protonvpn
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY=${wireguard_private_key}
+      - SERVER_COUNTRIES=United States
+      - SERVER_CITIES=Los Angeles
+      - UPDATER_PERIOD=12h
+      - PORT_FORWARDING_ONLY=on
+      - VPN_PORT_FORWARDING=on
+      - VPN_PORT_FORWARDING_STATUS_FILE=/tmp/gluetun/forwarded_port
+    volumes:
+      - gluetun-data:/tmp/gluetun
+      
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:5.1.4
+    container_name: qbittorrent
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ}
+      - WEBUI_PORT=8080
+    volumes:
+      - /home/axel/Docker/arr/qBittorrent/config:/config
+      - /mnt/storage/data/torrents/:/data
+    network_mode: service:gluetun
+    depends_on:
+      gluetun:
+        condition: service_started
+        restart: true
+    # labels:
+    #   - homepage.group=Torrent
+    #   - homepage.name=qBittorrent
+    #   - homepage.icon=qbittorrent.png
+    #   - homepage.href=http://192.168.1.44:8080/
+    #   - homepage.description=Torrent client
+    # ports:
+    #     - 8080:8080
+    #     - 6881:6881
+    #     - 6881:6881/udp
+    restart: unless-stopped
+    healthcheck:
+      test: curl -sf https://www.google.com/ || exit 1
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+      
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin # runtime: nvidia
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ}
+    volumes:
+      - /home/axel/Docker/arr/Jellyfin/config:/config
+      - /mnt/storage/data/media:/data/media
+    ports:
+      - 8096:8096
+    restart: unless-stopped
+    networks:
+      - caddy
+    labels:
+      caddy: jf.lab.axelegarcia.com
+      caddy.reverse_proxy: "{{upstreams 8096}}"
+      caddy.tls.dns: cloudflare ${CF_API_TOKEN}
+    #   - homepage.group=Media
+    #   - homepage.name=Jellyfin
+    #   - homepage.icon=jellyfin.png
+    #   - homepage.href=http://192.168.1.44:8096/
+    #   - homepage.description=Media Player
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:develop
+    container_name: sonarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ}
+    volumes:
+      - /home/axel/Docker/arr/Sonarr:/config
+      - /mnt/storage/data/:/data
+    ports:
+      - 8989:8989
+    networks:
+      - caddy
+    labels:
+      caddy: sonarr.lab.axelegarcia.com
+      caddy.reverse_proxy: "{{upstreams 8989}}"
+      caddy.tls.dns: cloudflare ${CF_API_TOKEN}
+    #   - homepage.group=Media
+    #   - homepage.name=Sonarr
+    #   - homepage.icon=sonarr.png
+    #   - homepage.href=http://192.168.1.44:8989/
+    #   - homepage.description=TV Series Grabber
+    restart: unless-stopped
+    
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ}
+    volumes:
+      - /home/axel/Docker/arr/Radarr:/config
+      - /mnt/storage/data/:/data
+    ports:
+      - 7878:7878
+    networks:
+      - caddy
+    labels:
+      caddy: radarr.lab.axelegarcia.com
+      caddy.reverse_proxy: "{{upstreams 7878}}"
+      caddy.tls.dns: cloudflare ${CF_API_TOKEN}
+    #   - homepage.group=Media
+    #   - homepage.name=Radarr
+    #   - homepage.icon=radarr.png
+    #   - homepage.href=http://192.168.1.44:7878/
+    #   - homepage.description=Movie Grabber
+    restart: unless-stopped
+    
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ}
+    volumes:
+      - /home/axel/Docker/arr/prowlarr:/config
+    networks:
+      - caddy
+    labels:
+      caddy: prowlarr.lab.axelegarcia.com
+      caddy.reverse_proxy: "{{upstreams 9696}}"
+      caddy.tls.dns: cloudflare ${CF_API_TOKEN}
+      # - homepage.group=Media
+      # - homepage.name=Prowlarr
+      # - homepage.icon=prowlarr.png
+      # - homepage.href=http://192.168.1.44:9696/
+      # - homepage.description=Indexer Handler
+    ports:
+      - 9696:9696
+    restart: unless-stopped
+    
+  flaresolverr:
+    # DockerHub mirror flaresolverr/flaresolverr:latest
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_HTML=${LOG_HTML:-false}
+      - CAPTCHA_SOLVER=${CAPTCHA_SOLVER:-none}
+      - TZ=${TZ}
+    ports:
+      - ${PORT:-8191}:8191
+    restart: unless-stopped
+    
+  notifiarr:
+    container_name: notifiarr
+    hostname: notifiarr
+    image: golift/notifiarr
+    restart: unless-stopped
+    ports:
+      - 5454:5454
+    volumes:
+      - /home/axel/Docker/arr/notifiarr:/config
+      - /var/run/utmp:/var/run/utmp
+      - /etc/machine-id:/etc/machine-id
+      
+  # homepage:
+  #   image: ghcr.io/gethomepage/homepage:latest
+  #   container_name: homepage
+  #   environment:
+  #     - HOMEPAGE_ALLOWED_HOSTS=10.10.10.44:3000
+  #   ports:
+  #     - 3000:3000
+  #   volumes:
+  #     - /home/axel/Docker/arr/homepage:/app/config # Make sure your local config directory exists
+  #     - /var/run/docker.sock:/var/run/docker.sock # optional, for docker integrations
+  #   restart: unless-stopped
+    
+  gluetun-qbittorrent-port-manager:
+    image: jopiermeier/gluetun-qbittorrent-port-manager:latest
+    network_mode: service:gluetun
+    restart: unless-stopped
+    depends_on:
+      gluetun:
+        condition: service_started
+        restart: true
+      qbittorrent:
+        condition: service_started
+        restart: true
+    environment:
+      - QBITTORRENT_USER=${port_qbit_user}
+      - QBITTORRENT_PASS=${port_qbit_password}
+    volumes:
+      - gluetun-data:/tmp/gluetun
+
+  seerr:
+    image: ghcr.io/seerr-team/seerr:latest
+    init: true
+    container_name: seerr
+    environment:
+      - LOG_LEVEL=debug
+      - TZ=${TZ}
+      - PORT=5055 #optional
+    ports:
+      - 5055:5055
+    volumes:
+      - /home/axel/Docker/arr/seerr/config:/app/config
+    networks:
+      - caddy
+    labels:
+      caddy: seerr.lab.axelegarcia.com
+      caddy.reverse_proxy: "{{upstreams 5055}}"
+      caddy.tls.dns: cloudflare ${CF_API_TOKEN}
+
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:5055/api/v1/status || exit 1
+      start_period: 20s
+      timeout: 3s
+      interval: 15s
+      retries: 3
+    restart: unless-stopped
+
+  autobrr:
+    container_name: autobrr
+    image: ghcr.io/autobrr/autobrr:latest
+    restart: unless-stopped
+    #logging:
+    #  driver: json-file
+    #  options:
+    #    max-file: ${DOCKERLOGGING_MAXFILE}
+    #    max-size: ${DOCKERLOGGING_MAXSIZE}
+    user: 1000:1000
+    environment:
+      - TZ=${TZ}
+    volumes:
+      - /home/axel/Docker/arr/autobrr/config:/config
+    networks:
+      - caddy
+    ports:
+      - 7474:7474
+    labels:
+      caddy: autobrr.lab.axelegarcia.com
+      caddy.reverse_proxy: "{{upstreams 7474}}"
+      caddy.tls.dns: cloudflare ${CF_API_TOKEN}
+      # caddy.tls: "internal"
+
+networks:
+  caddy:
+    external: true
+
+volumes:
+  caddy_data: {}
+  gluetun-data:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=64m,uid=1000,gid=1000,mode=1777

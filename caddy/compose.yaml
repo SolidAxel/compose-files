@@ -1,0 +1,38 @@
+services:
+  caddy:
+    # image: lucaslorentz/caddy-docker-proxy:ci-alpine
+    container_name: caddy
+    build:
+      dockerfile_inline: |
+        ARG CADDY_VERSION=2.11.4
+        FROM caddy:$${CADDY_VERSION}-builder AS builder
+
+        RUN xcaddy build \
+          --with github.com/lucaslorentz/caddy-docker-proxy/v2 \
+          --with github.com/caddy-dns/cloudflare@latest
+        FROM caddy:$${CADDY_VERSION}-alpine
+
+        COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+
+        CMD ["caddy", "docker-proxy"]
+    ports:
+      - 80:80
+      - 443:443/tcp
+      - 443:443/udp
+    environment:
+      - CADDY_INGRESS_NETWORKS=caddy
+    networks:
+      - caddy
+    labels:
+        caddy.email: axelegar@gmail.com
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/axel/Docker/arr/caddy:/data
+    restart: unless-stopped
+
+networks:
+  caddy:
+    external: true
+
+volumes:
+  caddy_data: {}
