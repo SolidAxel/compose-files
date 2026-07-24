@@ -27,6 +27,8 @@ services:
       - SERVER_COUNTRIES=United States
       - SERVER_CITIES=Los Angeles
       - UPDATER_PERIOD=12h
+      - UPDATER_PROTONVPN_EMAIL=${proton_email}
+      - UPDATER_PROTONVPN_PASSWORD=${proton_password}
       - PORT_FORWARDING_ONLY=on
       - VPN_PORT_FORWARDING=on
       - VPN_PORT_FORWARDING_STATUS_FILE=/tmp/gluetun/forwarded_port
